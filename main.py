@@ -113,11 +113,11 @@ def main(args):
         assert args.masks, "Frozen training is meant for segmentation only"
     print(args)
 
-    device = paddle.device(args.device)
+    device = paddle.set_device(args.device)
 
     # fix the seed for reproducibility
     seed = args.seed + utils.get_rank()
-    paddle.manual_seed(seed)
+    paddle.seed(seed)
     np.random.seed(seed)
     random.seed(seed)
 
@@ -138,9 +138,9 @@ def main(args):
             "lr": args.lr_backbone,
         },
     ]
-    optimizer = paddle.optim.AdamW(param_dicts, lr=args.lr,
+    optimizer = paddle.optimizer.AdamW(param_dicts, lr=args.lr,
                                   weight_decay=args.weight_decay)
-    lr_scheduler = paddle.optim.lr_scheduler.StepLR(optimizer, args.lr_drop)
+    lr_scheduler = paddle.optimizer.lr.StepDecay(optimizer, args.lr_drop)
 
     dataset_train = build_dataset(image_set='train', args=args)
     dataset_val = build_dataset(image_set='val', args=args)
@@ -149,15 +149,15 @@ def main(args):
         sampler_train = DistributedBatchSampler(dataset_train)
         sampler_val = DistributedBatchSampler(dataset_val, shuffle=False)
     else:
-        sampler_train = paddle.utils.data.RandomSampler(dataset_train)
-        sampler_val = paddle.utils.data.SequentialSampler(dataset_val)
+        sampler_train = paddle.io.RandomSampler(dataset_train)
+        sampler_val = paddle.io.SequenceSampler(dataset_val)
 
-    batch_sampler_train = paddle.utils.data.BatchSampler(
-        sampler_train, args.batch_size, drop_last=True)
+    batch_sampler_train = paddle.io.BatchSampler(
+        sampler=sampler_train, batch_size=args.batch_size, drop_last=True)
 
     data_loader_train = DataLoader(dataset_train, batch_sampler=batch_sampler_train,
                                    collate_fn=utils.collate_fn, num_workers=args.num_workers)
-    data_loader_val = DataLoader(dataset_val, args.batch_size, sampler=sampler_val,
+    data_loader_val = DataLoader(dataset_val, batch_size=args.batch_size, batch_sampler=sampler_val,
                                  drop_last=False, collate_fn=utils.collate_fn, num_workers=args.num_workers)
 
     if args.dataset_file == "coco_panoptic":
